@@ -11,6 +11,7 @@
 :root {
   --paper: #fbfaf6;
   --grid: #ece9df;
+  --sky: #e6edf3;
   --ink: #26252b;
   --ink-soft: #77747f;
   --guide: #9a97a3;
@@ -233,10 +234,9 @@ svg { width: 100%; height: 100%; display: block; touch-action: none; }
     const V = [S.vpx * W, S.hy * H];
     let out = '';
 
-    // paper grid
-    const step = 24;
-    out += `<defs><pattern id="grid" width="${step}" height="${step}" patternUnits="userSpaceOnUse"><path d="M ${step} 0 L 0 0 0 ${step}" fill="none" stroke="var(--grid)" stroke-width="1"/></pattern></defs>`;
-    out += `<rect width="${W}" height="${H}" fill="url(#grid)"/>`;
+    // soft sky down to the horizon
+    out += `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--sky)"/><stop offset="1" stop-color="var(--paper)"/></linearGradient></defs>`;
+    out += `<rect width="${W}" height="${Math.max(0, V[1]).toFixed(1)}" fill="url(#sky)"/>`;
 
     const boxes = S.boxes.filter(b => b.on);
     const geoms = boxes.map(b => ({ b, g: geom(b) }));
