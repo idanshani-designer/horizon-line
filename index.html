@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>קו האופק של אדם</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap">
+<style>
+/* Layout: one full-screen drawing sheet, a slim tool strip on top. Single paper look, by choice. */
+:root {
+  --paper: #fbfaf6;
+  --grid: #ece9df;
+  --ink: #26252b;
+  --ink-soft: #77747f;
+  --guide: #9a97a3;
+  --vp: #d9452b;
+  --glass: #2f6fb3;
+  --face-top: #dcdad3;
+  --face-side: #b9b6ae;
+  --face-front: #ffffff;
+  --chip: #f1efe8;
+  --font: 'Rubik', 'Assistant', 'Arial Hebrew', system-ui, sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px;
+  box-sizing: border-box;
+  gap: 6px;
+  direction: rtl;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bar h1 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 0 8px;
+  white-space: nowrap;
+}
+.chip {
+  font: 500 13px var(--font);
+  color: var(--ink);
+  background: var(--chip);
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 34px;
+}
+.chip .dot { width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid var(--ink); background: var(--face-front); }
+.chip .dot.glass { border-color: var(--glass); background: transparent; border-style: dashed; }
+.chip[aria-pressed="false"] { opacity: .45; }
+.chip[aria-pressed="true"] { border-color: var(--ink); }
+.chip:focus-visible { outline: 2px solid var(--vp); outline-offset: 2px; }
+.chip.reset { margin-inline-start: auto; background: transparent; border-color: var(--grid); }
+.stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--grid);
+}
+svg { width: 100%; height: 100%; display: block; touch-action: none; }
+.hint {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  pointer-events: none;
+  background: color-mix(in srgb, var(--paper) 85%, transparent);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.rotate {
+  position: fixed;
+  inset: 0;
+  background: var(--paper);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  direction: rtl;
+  padding: 24px;
+  z-index: 20;
+}
+.rotate p { font-size: 18px; font-weight: 500; margin: 0; max-width: 28ch; }
+.rotate .phone { width: 46px; height: 76px; border: 3px solid var(--ink); border-radius: 9px; animation: turn 2.4s ease-in-out infinite; }
+@keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (prefers-reduced-motion: reduce) { .rotate .phone { animation: none; transform: rotate(-90deg); } }
+@media (orientation: portrait) and (max-width: 700px) {
+  body:not(.ok-portrait) .rotate { display: flex; }
+}
+</style>
+<style>html,body{margin:0}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;height:100%}</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="bar" role="toolbar" aria-label="כלים">
+    <h1>קו האופק</h1>
+    <button class="chip" id="t-a" aria-pressed="true"><span class="dot"></span>קופסה למטה</button>
+    <button class="chip" id="t-b" aria-pressed="true"><span class="dot"></span>קופסה למעלה</button>
+    <button class="chip" id="t-c" aria-pressed="true"><span class="dot glass"></span>קופסה שקופה</button>
+    <button class="chip" id="t-lines" aria-pressed="true">קווים לנקודה</button>
+    <button class="chip" id="t-names" aria-pressed="true">מה רואים</button>
+    <button class="chip reset" id="t-reset">התחלה מחדש</button>
+  </div>
+  <div class="stage" id="stage">
+    <svg id="svg" direction="rtl" style="direction:rtl" aria-label="קו אופק, נקודת מגוז וקופסאות"></svg>
+    <div class="hint">גוררים את הנקודה האדומה, את קו האופק ואת הקופסאות</div>
+  </div>
+</div>
+
+<div class="rotate">
+  <div class="phone"></div>
+  <p>מסובבים את הטלפון לרוחב</p>
+  <button class="chip" id="t-portrait">להמשיך ככה</button>
+</div>
+
+<script>
+(() => {
+  const svg = document.getElementById('svg');
+  const stage = document.getElementById('stage');
+  const DEPTH = 0.32;
+
+  const initial = () => ({
+    vpx: 0.5,
+    hy: 0.42,
+    lines: true,
+    names: true,
+    boxes: [
+      { id: 'a', x: 0.10, y: 0.60, w: 0.18, h: 0.22, kind: 'solid', axis: 'x', on: true },
+      { id: 'b', x: 0.68, y: 0.07, w: 0.17, h: 0.18, kind: 'solid', axis: 'x', on: true },
+      { id: 'c', x: 0.62, y: 0.58, w: 0.15, h: 0.20, kind: 'glass', axis: 'xy', on: true }
+    ]
+  });
+  let S = initial();
+  let W = 0, H = 0;
+  let drag = null;
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const pt = p => p[0].toFixed(1) + ',' + p[1].toFixed(1);
+  const poly = (pts, cls) => `<polygon points="${pts.map(pt).join(' ')}" ${cls}/>`;
+  const line = (a, b, attrs) => `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" ${attrs}/>`;
+
+  function geom(b) {
+    const x = b.x * W, y = b.y * H, w = b.w * W, h = b.h * H;
+    const V = [S.vpx * W, S.hy * H];
+    const k = 1 - DEPTH;
+    const back = p => [V[0] + (p[0] - V[0]) * k, V[1] + (p[1] - V[1]) * k];
+    const F = { tl: [x, y], tr: [x + w, y], br: [x + w, y + h], bl: [x, y + h] };
+    const B = { tl: back(F.tl), tr: back(F.tr), br: back(F.br), bl: back(F.bl) };
+    const vis = {
+      top: y > V[1],
+      bottom: y + h < V[1],
+      right: x + w < V[0],
+      left: x > V[0]
+    };
+    return { F, B, vis, x, y, w, h };
+  }
+
+  function seen(vis) {
+    const parts = [];
+    if (vis.top) parts.push('גג');
+    if (vis.bottom) parts.push('תחתית');
+    if (vis.right) parts.push('צד ימין');
+    if (vis.left) parts.push('צד שמאל');
+    return parts.length ? 'רואים: חזית + ' + parts.join(' + ') : 'רואים: רק חזית';
+  }
+
+  function drawSolid(g) {
+    const { F, B, vis } = g;
+    let s = '';
+    const faceStyle = fill => `fill="${fill}" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"`;
+    if (vis.top) s += poly([F.tl, F.tr, B.tr, B.tl], faceStyle('var(--face-top)'));
+    if (vis.bottom) s += poly([F.bl, F.br, B.br, B.bl], faceStyle('var(--face-top)'));
+    if (vis.right) s += poly([F.tr, F.br, B.br, B.tr], faceStyle('var(--face-side)'));
+    if (vis.left) s += poly([F.tl, F.bl, B.bl, B.tl], faceStyle('var(--face-side)'));
+    s += poly([F.tl, F.tr, F.br, F.bl], faceStyle('var(--face-front)'));
+    return s;
+  }
+
+  function drawGlass(g) {
+    const { F, B, vis } = g;
+    const solid = 'stroke="var(--glass)" stroke-width="2" stroke-linecap="round"';
+    const hidden = 'stroke="var(--glass)" stroke-width="1.5" stroke-dasharray="5 5" opacity=".7"';
+    const E = (a, b, isVis) => line(a, b, isVis ? solid : hidden);
+    let s = poly([F.tl, F.tr, F.br, F.bl], 'fill="var(--glass)" fill-opacity=".07" stroke="none"');
+    // back face edges
+    s += E(B.tl, B.tr, vis.top);
+    s += E(B.bl, B.br, vis.bottom);
+    s += E(B.tl, B.bl, vis.left);
+    s += E(B.tr, B.br, vis.right);
+    // depth edges
+    s += E(F.tl, B.tl, vis.top || vis.left);
+    s += E(F.tr, B.tr, vis.top || vis.right);
+    s += E(F.br, B.br, vis.bottom || vis.right);
+    s += E(F.bl, B.bl, vis.bottom || vis.left);
+    // front face
+    s += E(F.tl, F.tr, true) + E(F.tr, F.br, true) + E(F.br, F.bl, true) + E(F.bl, F.tl, true);
+    return s;
+  }
+
+  function render() {
+    const r = stage.getBoundingClientRect();
+    W = r.width; H = r.height;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const V = [S.vpx * W, S.hy * H];
+    let out = '';
+
+    // paper grid
+    const step = 24;
+    out += `<defs><pattern id="grid" width="${step}" height="${step}" patternUnits="userSpaceOnUse"><path d="M ${step} 0 L 0 0 0 ${step}" fill="none" stroke="var(--grid)" stroke-width="1"/></pattern></defs>`;
+    out += `<rect width="${W}" height="${H}" fill="url(#grid)"/>`;
+
+    const boxes = S.boxes.filter(b => b.on);
+    const geoms = boxes.map(b => ({ b, g: geom(b) }));
+
+    // guide lines to the vanishing point (under the boxes)
+    if (S.lines) {
+      geoms.forEach(({ b, g }) => {
+        const color = b.kind === 'glass' ? 'var(--glass)' : 'var(--guide)';
+        ['tl', 'tr', 'br', 'bl'].forEach(c => {
+          out += line(g.F[c], V, `stroke="${color}" stroke-width="1" stroke-dasharray="2 4" opacity=".75"`);
+        });
+      });
+    }
+
+    // horizon
+    out += `<g data-drag="horizon" style="cursor:ns-resize">`;
+    out += line([0, V[1]], [W, V[1]], 'stroke="transparent" stroke-width="34"');
+    out += line([0, V[1]], [W, V[1]], 'stroke="var(--ink)" stroke-width="2"');
+    out += `<rect x="${W - 46}" y="${V[1] - 15}" width="40" height="30" rx="8" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.5"/>`;
+    out += `<path d="M ${W - 26} ${V[1] - 9} l -5 6 h 10 z M ${W - 26} ${V[1] + 9} l -5 -6 h 10 z" fill="var(--ink)"/>`;
+    out += `<text x="${W - 54}" y="${V[1] - 9}" text-anchor="start" font-size="12" fill="var(--ink-soft)" font-family="var(--font)">קו האופק · גובה העיניים</text>`;
+    out += `</g>`;
+
+    // boxes (drawn farthest-from-viewer first is not needed for 3 boxes; solid then glass)
+    geoms.sort((p, q) => (p.b.kind === 'glass') - (q.b.kind === 'glass'));
+    geoms.forEach(({ b, g }) => {
+      out += `<g data-drag="box" data-id="${b.id}" style="cursor:${b.axis === 'x' ? 'ew-resize' : 'move'}">`;
+      out += b.kind === 'glass' ? drawGlass(g) : drawSolid(g);
+      out += `</g>`;
+      if (S.names) {
+        const ys = [...Object.values(g.F), ...Object.values(g.B)].map(p => p[1]);
+        const maxY = Math.max(...ys), minY = Math.min(...ys);
+        const below = maxY + 18 < H - 26;
+        const ty = below ? maxY + 17 : minY - 8;
+        const color = b.kind === 'glass' ? 'var(--glass)' : 'var(--ink-soft)';
+        out += `<text x="${(g.x + g.w / 2).toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" font-size="12" font-weight="500" fill="${color}" font-family="var(--font)" pointer-events="none">${seen(g.vis)}</text>`;
+      }
+    });
+
+    // vanishing point
+    out += `<g data-drag="vp" style="cursor:grab">`;
+    out += `<circle cx="${V[0]}" cy="${V[1]}" r="26" fill="transparent"/>`;
+    out += `<circle cx="${V[0]}" cy="${V[1]}" r="11" fill="var(--paper)" stroke="var(--vp)" stroke-width="2"/>`;
+    out += `<circle cx="${V[0]}" cy="${V[1]}" r="5.5" fill="var(--vp)"/>`;
+    out += `<text x="${V[0]}" y="${V[1] - 19}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--vp)" font-family="var(--font)" pointer-events="none">נקודת מגוז</text>`;
+    out += `</g>`;
+
+    const cs = getComputedStyle(document.documentElement);
+    out = out.replace(/var\((--[\w-]+)\)/g, (m, n) => cs.getPropertyValue(n).trim() || m);
+    svg.innerHTML = out;
+  }
+
+  function local(e) {
+    const r = svg.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+
+  svg.addEventListener('pointerdown', e => {
+    const t = e.target.closest('[data-drag]');
+    if (!t) return;
+    const [px, py] = local(e);
+    const type = t.dataset.drag;
+    drag = { type, px, py };
+    if (type === 'box') {
+      const b = S.boxes.find(o => o.id === t.dataset.id);
+      drag.box = b; drag.bx = b.x; drag.by = b.y;
+    } else if (type === 'vp') {
+      drag.vx = S.vpx; drag.hy = S.hy;
+    } else {
+      drag.hy = S.hy;
+    }
+    svg.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  svg.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const [px, py] = local(e);
+    const dx = (px - drag.px) / W, dy = (py - drag.py) / H;
+    if (drag.type === 'box') {
+      const b = drag.box;
+      b.x = clamp(drag.bx + dx, 0.01, 0.99 - b.w);
+      if (b.axis === 'xy') b.y = clamp(drag.by + dy, 0.02, 0.97 - b.h);
+    } else if (drag.type === 'vp') {
+      S.vpx = clamp(drag.vx + dx, 0.03, 0.97);
+      S.hy = clamp(drag.hy + dy, 0.05, 0.95);
+    } else {
+      S.hy = clamp(drag.hy + dy, 0.05, 0.95);
+    }
+    render();
+  });
+
+  const end = () => { drag = null; };
+  svg.addEventListener('pointerup', end);
+  svg.addEventListener('pointercancel', end);
+
+  // toolbar
+  function bindToggle(id, get, set) {
+    const el = document.getElementById(id);
+    const sync = () => el.setAttribute('aria-pressed', String(get()));
+    el.addEventListener('click', () => { set(!get()); sync(); render(); });
+    sync();
+    return sync;
+  }
+  const syncs = [
+    bindToggle('t-a', () => S.boxes[0].on, v => S.boxes[0].on = v),
+    bindToggle('t-b', () => S.boxes[1].on, v => S.boxes[1].on = v),
+    bindToggle('t-c', () => S.boxes[2].on, v => S.boxes[2].on = v),
+    bindToggle('t-lines', () => S.lines, v => S.lines = v),
+    bindToggle('t-names', () => S.names, v => S.names = v)
+  ];
+  document.getElementById('t-reset').addEventListener('click', () => {
+    S = initial();
+    syncs.forEach(f => f());
+    render();
+  });
+  document.getElementById('t-portrait').addEventListener('click', () => {
+    document.body.classList.add('ok-portrait');
+    requestAnimationFrame(render);
+  });
+
+  new ResizeObserver(render).observe(stage);
+  render();
+})();
+</script>
+</body>
+</html>
